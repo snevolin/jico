@@ -1,5 +1,7 @@
 [package]
 name = "jico"
+repository = "https://github.com/snevolin/jico"
+description = "CLI helper for Jira Cloud"
 version = "0.0.1"
 edition = "2024"
 
