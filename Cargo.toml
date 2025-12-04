@@ -1,9 +1,17 @@
 [package]
 name = "jico"
 repository = "https://github.com/snevolin/jico"
+homepage = "https://github.com/snevolin/jico"
 description = "CLI helper for Jira Cloud"
+authors = ["Stanislav Nevolin <stanislav@nevolin.info>"]
 version = "0.0.1"
 edition = "2024"
+
+[package.metadata.wix]
+upgrade-guid = "89E8CFF1-265E-42B6-BF61-662BAE0CD3A0"
+path-guid = "4076081F-54BD-4373-A7D5-18B8B35B3F2F"
+license = false
+eula = false
 
 [dependencies]
 anyhow = "1.0.86"
@@ -14,3 +22,8 @@ serde_json = "1.0.122"
 tokio = { version = "1.39.2", features = ["macros", "rt-multi-thread"] }
 base64 = "0.22.1"
 dotenvy = "0.15.7"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
