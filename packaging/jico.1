@@ -1,0 +1,51 @@
+.\" Manpage for jico
+.TH jico 1 "v0.0.1" "jico" "User Commands"
+.SH NAME
+jico \- CLI helper for Jira Cloud
+.SH SYNOPSIS
+.B jico
+.I COMMAND
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B jico
+creates and queries Jira Cloud issues from the command line. All responses are printed as pretty JSON.
+.SH ENVIRONMENT
+.TP
+.B JIRA_BASE_URL
+Base URL of your Jira Cloud site (e.g. https://example.atlassian.net) \- required.
+.TP
+.B JIRA_EMAIL
+Account email for API access \- required.
+.TP
+.B JIRA_API_TOKEN
+API token generated in Jira Cloud \- required.
+.TP
+.B JIRA_PROJECT_KEY
+Default project key for commands that need it \- optional.
+.TP
+.B JIRA_DEFAULT_JQL
+Default JQL used by the list command when not provided \- optional.
+.PP
+Variables can be supplied directly in the environment or via a .env file in the working directory; existing environment values take priority over .env.
+.SH COMMANDS
+.TP
+.B create
+Create an issue: \fBjico create "Summary" [--description TEXT] [--project KEY] [--issue-type NAME]\fR
+.TP
+.B list
+List issues: \fBjico list [--jql EXPR] [--limit N] [--project KEY]\fR
+.TP
+.B view
+View an issue: \fBjico view ISSUE-KEY\fR
+.TP
+.B transition
+Transition an issue: \fBjico transition ISSUE-KEY --to STATUS\fR
+.SH EXAMPLES
+.nf
+jico create "Fix login" --project ACME
+jico list --limit 20
+jico view ACME-123
+jico transition ACME-123 --to "In Progress"
+.fi
+.SH AUTHOR
+Stanislav Nevolin <stanislav@nevolin.info>
