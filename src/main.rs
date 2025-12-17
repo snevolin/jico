@@ -450,3 +450,89 @@ fn print_json(value: &Value) {
         Err(_) => println!("{}", value),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use httpmock::prelude::*;
+
+    fn test_settings(base_url: &str) -> Settings {
+        Settings {
+            base_url: base_url.trim_end_matches('/').to_string(),
+            email: "user@example.com".to_string(),
+            api_token: "token".to_string(),
+            project_key: None,
+            default_jql: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn create_issue_sends_all_fields() {
+        let server = MockServer::start();
+        let expected_body = json!({
+            "fields": {
+                "project": { "key": "ACME" },
+                "summary": "Title",
+                "issuetype": { "name": "Task" },
+                "description": description_to_adf("Desc"),
+                "labels": ["bug", "ui"],
+                "priority": { "name": "High" },
+                "assignee": { "accountId": "abc" }
+            }
+        });
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/rest/api/3/issue")
+                .json_body(expected_body.clone());
+            then.status(201).json_body(json!({ "id": "10000" }));
+        });
+
+        let client = JiraClient::new(&test_settings(&server.base_url())).unwrap();
+        let response = client
+            .create_issue(
+                "ACME",
+                "Title",
+                Some("Desc".to_string()),
+                "Task",
+                Some(vec!["bug".to_string(), "ui".to_string()]),
+                Some("High".to_string()),
+                Some("abc".to_string()),
+            )
+            .await
+            .unwrap();
+
+        mock.assert();
+        assert_eq!(response["id"], "10000");
+    }
+
+    #[tokio::test]
+    async fn update_issue_sends_requested_fields() {
+        let server = MockServer::start();
+        let expected_body = json!({
+            "fields": {
+                "summary": "New summary",
+                "labels": ["backend"],
+                "priority": { "name": "Medium" },
+                "assignee": { "accountId": "xyz" }
+            }
+        });
+        let mock = server.mock(|when, then| {
+            when.method(PUT)
+                .path("/rest/api/3/issue/ACME-1")
+                .json_body(expected_body.clone());
+            then.status(200).json_body(json!({ "ok": true }));
+        });
+
+        let client = JiraClient::new(&test_settings(&server.base_url())).unwrap();
+        let mut fields = Map::new();
+        fields.insert("summary".to_string(), json!("New summary"));
+        fields.insert("labels".to_string(), json!(["backend"]));
+        fields.insert("priority".to_string(), json!({ "name": "Medium" }));
+        fields.insert("assignee".to_string(), json!({ "accountId": "xyz" }));
+
+        let response = client.update_issue("ACME-1", fields).await.unwrap();
+
+        mock.assert();
+        assert_eq!(response["ok"], true);
+    }
+}
