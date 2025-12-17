@@ -4,9 +4,9 @@ use anyhow::{Context, Result, anyhow};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use clap::{Parser, Subcommand};
-use reqwest::header;
-use serde_json::{Value, json};
 use dotenvy::dotenv;
+use reqwest::header;
+use serde_json::{Map, Value, json};
 
 #[derive(Parser, Debug)]
 #[command(name = "jico", version, about = "CLI helper for Jira Cloud")]
@@ -30,6 +30,15 @@ enum Commands {
         /// Issue type name; default: Task
         #[arg(long, default_value = "Task")]
         issue_type: String,
+        /// Labels to set (comma-separated or repeated)
+        #[arg(long, value_delimiter = ',')]
+        labels: Option<Vec<String>>,
+        /// Priority name
+        #[arg(long)]
+        priority: Option<String>,
+        /// Assignee accountId
+        #[arg(long)]
+        assignee: Option<String>,
     },
     /// List issues via JQL
     List {
@@ -47,6 +56,32 @@ enum Commands {
     View {
         /// Issue key, e.g., PROJ-123
         key: String,
+    },
+    /// Update issue fields
+    Update {
+        /// Issue key, e.g., PROJ-123
+        key: String,
+        /// New summary/title
+        #[arg(long)]
+        summary: Option<String>,
+        /// New description (plain text)
+        #[arg(long)]
+        description: Option<String>,
+        /// Move issue to another project (project key)
+        #[arg(long)]
+        project: Option<String>,
+        /// New issue type name
+        #[arg(long)]
+        issue_type: Option<String>,
+        /// Labels to set (comma-separated or repeated)
+        #[arg(long, value_delimiter = ',')]
+        labels: Option<Vec<String>>,
+        /// Priority name
+        #[arg(long)]
+        priority: Option<String>,
+        /// Assignee accountId
+        #[arg(long)]
+        assignee: Option<String>,
     },
     /// Transition an issue to a new status/transition
     Transition {
@@ -129,29 +164,29 @@ impl JiraClient {
         summary: &str,
         description: Option<String>,
         issue_type: &str,
+        labels: Option<Vec<String>>,
+        priority: Option<String>,
+        assignee: Option<String>,
     ) -> Result<Value> {
         let url = format!("{}/rest/api/3/issue", self.base_url);
-        let description_adf = description.map(|text| {
-            json!({
-                "type": "doc",
-                "version": 1,
-                "content": [{
-                    "type": "paragraph",
-                    "content": [{
-                        "type": "text",
-                        "text": text
-                    }]
-                }]
-            })
-        });
-        let body = json!({
-            "fields": {
-                "project": { "key": project_key },
-                "summary": summary,
-                "issuetype": { "name": issue_type },
-                "description": description_adf.unwrap_or_else(|| json!(null)),
-            }
-        });
+        let mut fields = Map::new();
+        fields.insert("project".to_string(), json!({ "key": project_key }));
+        fields.insert("summary".to_string(), json!(summary));
+        fields.insert("issuetype".to_string(), json!({ "name": issue_type }));
+        let description_adf = description
+            .map(|text| description_to_adf(&text))
+            .unwrap_or_else(|| json!(null));
+        fields.insert("description".to_string(), description_adf);
+        if let Some(labels) = labels {
+            fields.insert("labels".to_string(), json!(labels));
+        }
+        if let Some(priority) = priority {
+            fields.insert("priority".to_string(), json!({ "name": priority }));
+        }
+        if let Some(assignee) = assignee {
+            fields.insert("assignee".to_string(), json!({ "accountId": assignee }));
+        }
+        let body = json!({ "fields": fields });
 
         let resp = self
             .http
@@ -209,6 +244,27 @@ impl JiraClient {
             .json()
             .await
             .context("Failed to parse get issue response")?;
+        if !status.is_success() {
+            return Err(anyhow!("Jira returned error status {}: {}", status, value));
+        }
+        Ok(value)
+    }
+
+    async fn update_issue(&self, key: &str, fields: Map<String, Value>) -> Result<Value> {
+        let url = format!("{}/rest/api/3/issue/{}", self.base_url, key);
+        let body = json!({ "fields": fields });
+        let resp = self
+            .http
+            .put(url)
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to send update issue request")?;
+        let status = resp.status();
+        let value: Value = resp
+            .json()
+            .await
+            .context("Failed to parse update issue response")?;
         if !status.is_success() {
             return Err(anyhow!("Jira returned error status {}: {}", status, value));
         }
@@ -281,10 +337,21 @@ async fn main() -> Result<()> {
             description,
             project,
             issue_type,
+            labels,
+            priority,
+            assignee,
         } => {
             let project_key = resolve_project(&settings, project)?;
             let created = client
-                .create_issue(&project_key, &summary, description, &issue_type)
+                .create_issue(
+                    &project_key,
+                    &summary,
+                    description,
+                    &issue_type,
+                    labels,
+                    priority,
+                    assignee,
+                )
                 .await?;
             print_json(&created);
         }
@@ -308,6 +375,46 @@ async fn main() -> Result<()> {
             let issue = client.get_issue(&key).await?;
             print_json(&issue);
         }
+        Commands::Update {
+            key,
+            summary,
+            description,
+            project,
+            issue_type,
+            labels,
+            priority,
+            assignee,
+        } => {
+            let mut fields = Map::new();
+            if let Some(summary) = summary {
+                fields.insert("summary".to_string(), json!(summary));
+            }
+            if let Some(description) = description {
+                fields.insert("description".to_string(), description_to_adf(&description));
+            }
+            if let Some(project) = project {
+                fields.insert("project".to_string(), json!({ "key": project }));
+            }
+            if let Some(issue_type) = issue_type {
+                fields.insert("issuetype".to_string(), json!({ "name": issue_type }));
+            }
+            if let Some(labels) = labels {
+                fields.insert("labels".to_string(), json!(labels));
+            }
+            if let Some(priority) = priority {
+                fields.insert("priority".to_string(), json!({ "name": priority }));
+            }
+            if let Some(assignee) = assignee {
+                fields.insert("assignee".to_string(), json!({ "accountId": assignee }));
+            }
+            if fields.is_empty() {
+                return Err(anyhow!(
+                    "Provide at least one field to update (--summary, --description, --project, --issue-type, --labels, --priority, --assignee)"
+                ));
+            }
+            let updated = client.update_issue(&key, fields).await?;
+            print_json(&updated);
+        }
         Commands::Transition { key, to } => {
             let result = client.transition_issue(&key, &to).await?;
             print_json(&result);
@@ -323,9 +430,109 @@ fn resolve_project(settings: &Settings, override_key: Option<String>) -> Result<
         .ok_or_else(|| anyhow!("Project key is required (pass --project or set JIRA_PROJECT_KEY)"))
 }
 
+fn description_to_adf(text: &str) -> Value {
+    json!({
+        "type": "doc",
+        "version": 1,
+        "content": [{
+            "type": "paragraph",
+            "content": [{
+                "type": "text",
+                "text": text
+            }]
+        }]
+    })
+}
+
 fn print_json(value: &Value) {
     match serde_json::to_string_pretty(value) {
         Ok(s) => println!("{s}"),
         Err(_) => println!("{}", value),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use httpmock::prelude::*;
+
+    fn test_settings(base_url: &str) -> Settings {
+        Settings {
+            base_url: base_url.trim_end_matches('/').to_string(),
+            email: "user@example.com".to_string(),
+            api_token: "token".to_string(),
+            project_key: None,
+            default_jql: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn create_issue_sends_all_fields() {
+        let server = MockServer::start();
+        let expected_body = json!({
+            "fields": {
+                "project": { "key": "ACME" },
+                "summary": "Title",
+                "issuetype": { "name": "Task" },
+                "description": description_to_adf("Desc"),
+                "labels": ["bug", "ui"],
+                "priority": { "name": "High" },
+                "assignee": { "accountId": "abc" }
+            }
+        });
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/rest/api/3/issue")
+                .json_body(expected_body.clone());
+            then.status(201).json_body(json!({ "id": "10000" }));
+        });
+
+        let client = JiraClient::new(&test_settings(&server.base_url())).unwrap();
+        let response = client
+            .create_issue(
+                "ACME",
+                "Title",
+                Some("Desc".to_string()),
+                "Task",
+                Some(vec!["bug".to_string(), "ui".to_string()]),
+                Some("High".to_string()),
+                Some("abc".to_string()),
+            )
+            .await
+            .unwrap();
+
+        mock.assert();
+        assert_eq!(response["id"], "10000");
+    }
+
+    #[tokio::test]
+    async fn update_issue_sends_requested_fields() {
+        let server = MockServer::start();
+        let expected_body = json!({
+            "fields": {
+                "summary": "New summary",
+                "labels": ["backend"],
+                "priority": { "name": "Medium" },
+                "assignee": { "accountId": "xyz" }
+            }
+        });
+        let mock = server.mock(|when, then| {
+            when.method(PUT)
+                .path("/rest/api/3/issue/ACME-1")
+                .json_body(expected_body.clone());
+            then.status(200).json_body(json!({ "ok": true }));
+        });
+
+        let client = JiraClient::new(&test_settings(&server.base_url())).unwrap();
+        let mut fields = Map::new();
+        fields.insert("summary".to_string(), json!("New summary"));
+        fields.insert("labels".to_string(), json!(["backend"]));
+        fields.insert("priority".to_string(), json!({ "name": "Medium" }));
+        fields.insert("assignee".to_string(), json!({ "accountId": "xyz" }));
+
+        let response = client.update_issue("ACME-1", fields).await.unwrap();
+
+        mock.assert();
+        assert_eq!(response["ok"], true);
     }
 }

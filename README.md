@@ -1,6 +1,6 @@
 # jico
 
-Rust CLI for Jira Cloud: create issues, list/search, view, and transition statuses. All Jira responses are printed as pretty JSON for easy reading/parsing.
+Rust CLI for Jira Cloud: create issues, list/search, view, update fields, and transition statuses. All Jira responses are printed as pretty JSON for easy reading/parsing.
 
 Current version: v0.0.1.
 
@@ -24,9 +24,10 @@ jico <command> [args]
 ```
 
 Commands:
-- `create <summary> [--description <text>] [--project <KEY>] [--issue-type <name>]` — create an issue.
+- `create <summary> [--description <text>] [--project <KEY>] [--issue-type <name>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — create an issue.
 - `list [--jql <expr>] [--limit <n>] [--project <KEY>]` — list issues (defaults to `JIRA_DEFAULT_JQL` or `project = KEY`).
 - `view <ISSUE-KEY>` — show an issue.
+- `update <ISSUE-KEY> [--summary <text>] [--description <text>] [--project <KEY>] [--issue-type <name>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — update an issue (provide at least one field).
 - `transition <ISSUE-KEY> --to <status>` — perform a transition by name (case-insensitive).
 
 If no project is provided, `JIRA_PROJECT_KEY` is used (when present).
@@ -35,8 +36,10 @@ If no project is provided, `JIRA_PROJECT_KEY` is used (when present).
 
 ```
 jico create "Fix login"
+jico create "Fix login" --labels bug,ui --priority High --assignee 12345:abcd
 jico list --limit 10
 jico view PROJ-123
+jico update PROJ-123 --summary "Tighten auth" --description "Rotated secrets"
 jico transition PROJ-123 --to "In Progress"
 ```
 

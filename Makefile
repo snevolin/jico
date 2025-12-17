@@ -1,8 +1,12 @@
 NAME ?= jico
-VERSION ?= 0.0.1
+VERSION ?= 0.0.2
 RPMBUILD := $(CURDIR)/target/rpm
 
-.PHONY: rpm
+.PHONY: rpm test
+
+test:
+	cargo test
+
 rpm:
 	cargo build --release
 	mkdir -p $(RPMBUILD)/SOURCES

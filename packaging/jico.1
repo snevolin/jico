@@ -30,7 +30,7 @@ Variables can be supplied directly in the environment or via a .env file in the 
 .SH COMMANDS
 .TP
 .B create
-Create an issue: \fBjico create "Summary" [--description TEXT] [--project KEY] [--issue-type NAME]\fR
+Create an issue: \fBjico create "Summary" [--description TEXT] [--project KEY] [--issue-type NAME] [--labels A,B] [--priority NAME] [--assignee ACCOUNTID]\fR
 .TP
 .B list
 List issues: \fBjico list [--jql EXPR] [--limit N] [--project KEY]\fR
@@ -38,13 +38,17 @@ List issues: \fBjico list [--jql EXPR] [--limit N] [--project KEY]\fR
 .B view
 View an issue: \fBjico view ISSUE-KEY\fR
 .TP
+.B update
+Update fields: \fBjico update ISSUE-KEY [--summary TEXT] [--description TEXT] [--project KEY] [--issue-type NAME] [--labels A,B] [--priority NAME] [--assignee ACCOUNTID]\fR
+.TP
 .B transition
 Transition an issue: \fBjico transition ISSUE-KEY --to STATUS\fR
 .SH EXAMPLES
 .nf
-jico create "Fix login" --project ACME
+jico create "Fix login" --project ACME --labels bug,ui --priority High --assignee 12345:abcd
 jico list --limit 20
 jico view ACME-123
+jico update ACME-123 --summary "Clarify scope" --labels backend --priority Medium
 jico transition ACME-123 --to "In Progress"
 .fi
 .SH AUTHOR

@@ -1,6 +1,6 @@
 # jico
 
-Консольная утилита на Rust для работы с Jira Cloud: создание, просмотр, список задач и переходы статусов. Все ответы от Jira выводятся в JSON (pretty-print), чтобы их легко было парсить/читать.
+Консольная утилита на Rust для работы с Jira Cloud: создание, просмотр, редактирование, список задач и переходы статусов. Все ответы от Jira выводятся в JSON (pretty-print), чтобы их легко было парсить/читать.
 
 Текущая версия: v0.0.1.
 
@@ -24,9 +24,10 @@ jico <command> [args]
 ```
 
 Команды:
-- `create <summary> [--description <text>] [--project <KEY>] [--issue-type <name>]` — создать задачу.
+- `create <summary> [--description <text>] [--project <KEY>] [--issue-type <name>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — создать задачу.
 - `list [--jql <expr>] [--limit <n>] [--project <KEY>]` — список задач (по умолчанию `JIRA_DEFAULT_JQL` или `project = KEY`).
 - `view <ISSUE-KEY>` — показать задачу.
+- `update <ISSUE-KEY> [--summary <text>] [--description <text>] [--project <KEY>] [--issue-type <name>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — изменить поля задачи (нужно указать хотя бы одно поле).
 - `transition <ISSUE-KEY> --to <status>` — выполнить переход по статусу/transition name (по имени без учета регистра).
 
 Если не указан проект, используется `JIRA_PROJECT_KEY` (если задан).
@@ -35,8 +36,10 @@ jico <command> [args]
 
 ```
 jico create "Fix login"
+jico create "Fix login" --labels bug,ui --priority High --assignee 12345:abcd
 jico list --limit 10
 jico view PROJ-123
+jico update PROJ-123 --summary "Уточнить задачу" --description "Подправили текст"
 jico transition PROJ-123 --to "In Progress"
 ```
 
