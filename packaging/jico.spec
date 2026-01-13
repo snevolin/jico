@@ -7,6 +7,7 @@ URL:            https://example.com/jico
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  rust
 BuildRequires:  cargo
+BuildRequires:  openssl-devel
 BuildArch:      x86_64
 
 %description

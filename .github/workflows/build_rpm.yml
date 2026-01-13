@@ -15,7 +15,7 @@ jobs:
       # Install git and build dependencies. Fedora's minimal image may not have them.
       - name: Install dependencies
         run: |
-          dnf install -y git rpm-build rust cargo tar gzip
+          dnf install -y git rpm-build rust cargo tar gzip openssl-devel
 
       - name: Checkout code
         uses: actions/checkout@v4
