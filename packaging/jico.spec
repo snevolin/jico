@@ -29,5 +29,5 @@ install -Dm644 env.example %{buildroot}%{_datadir}/doc/%{name}/env.example
 %{_datadir}/doc/%{name}/env.example
 
 %changelog
-* Thu Jan 01 1970 jico maintainer <noreply@example.com> - %{version}-1
-- Initial RPM build
+* Wed Dec 17 2025 jico maintainer <noreply@example.com> - %{version}-1
+- Initial RPM build; includes CLI commands for create/list/view/update/transition with labels/priority/assignee support
