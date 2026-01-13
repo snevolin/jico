@@ -1,0 +1,52 @@
+name: Build RPM
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+jobs:
+  build_rpm:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+
+    steps:
+      # Install git and build dependencies. Fedora's minimal image may not have them.
+      - name: Install dependencies
+        run: |
+          dnf install -y git rpm-build rust cargo tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare Source
+        run: |
+          # Extract version from Cargo.toml
+          VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f 2)
+          echo "Detected version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
+          # Prepare directory for archiving to match %setup -q in the spec file.
+          # Use a temp directory to avoid self-referencing.
+          mkdir -p /tmp/jico-$VERSION
+          cp -r . /tmp/jico-$VERSION/
+          rm -rf /tmp/jico-$VERSION/.git
+          
+          # Create tarball in the current working directory
+          tar -czf jico-$VERSION.tar.gz -C /tmp jico-$VERSION
+          
+          # Setup rpmbuild directory structure
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          mv jico-$VERSION.tar.gz ~/rpmbuild/SOURCES/
+
+      - name: Build RPM
+        run: |
+          # Run rpmbuild, passing the extracted version
+          rpmbuild -ba packaging/jico.spec --define "version ${{ env.VERSION }}"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jico-rpm
+          path: ~/rpmbuild/RPMS/**/*.rpm
