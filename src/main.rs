@@ -27,9 +27,12 @@ enum Commands {
         /// Project key; falls back to config
         #[arg(long)]
         project: Option<String>,
-        /// Issue type name; default: Task
-        #[arg(long, default_value = "Task")]
-        issue_type: String,
+        /// Issue type name; default: Task (or Sub-task when --parent is set)
+        #[arg(long)]
+        issue_type: Option<String>,
+        /// Parent issue key (create as sub-task)
+        #[arg(long)]
+        parent: Option<String>,
         /// Labels to set (comma-separated or repeated)
         #[arg(long, value_delimiter = ',')]
         labels: Option<Vec<String>>,
@@ -56,6 +59,9 @@ enum Commands {
     View {
         /// Issue key, e.g., PROJ-123
         key: String,
+        /// Show only subtasks
+        #[arg(long)]
+        subtasks: bool,
     },
     /// Update issue fields
     Update {
@@ -73,6 +79,9 @@ enum Commands {
         /// New issue type name
         #[arg(long)]
         issue_type: Option<String>,
+        /// Parent issue key (set as sub-task)
+        #[arg(long)]
+        parent: Option<String>,
         /// Labels to set (comma-separated or repeated)
         #[arg(long, value_delimiter = ',')]
         labels: Option<Vec<String>>,
@@ -164,6 +173,7 @@ impl JiraClient {
         summary: &str,
         description: Option<String>,
         issue_type: &str,
+        parent: Option<String>,
         labels: Option<Vec<String>>,
         priority: Option<String>,
         assignee: Option<String>,
@@ -177,6 +187,9 @@ impl JiraClient {
             .map(|text| description_to_adf(&text))
             .unwrap_or_else(|| json!(null));
         fields.insert("description".to_string(), description_adf);
+        if let Some(parent) = parent {
+            fields.insert("parent".to_string(), json!({ "key": parent }));
+        }
         if let Some(labels) = labels {
             fields.insert("labels".to_string(), json!(labels));
         }
@@ -248,6 +261,32 @@ impl JiraClient {
             return Err(anyhow!("Jira returned error status {}: {}", status, value));
         }
         Ok(value)
+    }
+
+    async fn get_issue_subtasks(&self, key: &str) -> Result<Value> {
+        let url = format!(
+            "{}/rest/api/3/issue/{}?fields=subtasks",
+            self.base_url, key
+        );
+        let resp = self
+            .http
+            .get(url)
+            .send()
+            .await
+            .context("Failed to send get issue subtasks request")?;
+        let status = resp.status();
+        let value: Value = resp
+            .json()
+            .await
+            .context("Failed to parse get issue subtasks response")?;
+        if !status.is_success() {
+            return Err(anyhow!("Jira returned error status {}: {}", status, value));
+        }
+        Ok(value
+            .get("fields")
+            .and_then(|fields| fields.get("subtasks"))
+            .cloned()
+            .unwrap_or_else(|| json!([])))
     }
 
     async fn update_issue(&self, key: &str, fields: Map<String, Value>) -> Result<Value> {
@@ -342,17 +381,26 @@ async fn main() -> Result<()> {
             description,
             project,
             issue_type,
+            parent,
             labels,
             priority,
             assignee,
         } => {
             let project_key = resolve_project(&settings, project)?;
+            let issue_type = issue_type.unwrap_or_else(|| {
+                if parent.is_some() {
+                    "Sub-task".to_string()
+                } else {
+                    "Task".to_string()
+                }
+            });
             let created = client
                 .create_issue(
                     &project_key,
                     &summary,
                     description,
                     &issue_type,
+                    parent,
                     labels,
                     priority,
                     assignee,
@@ -376,9 +424,14 @@ async fn main() -> Result<()> {
             let results = client.list_issues(&jql, limit).await?;
             print_json(&results);
         }
-        Commands::View { key } => {
-            let issue = client.get_issue(&key).await?;
-            print_json(&issue);
+        Commands::View { key, subtasks } => {
+            if subtasks {
+                let list = client.get_issue_subtasks(&key).await?;
+                print_json(&list);
+            } else {
+                let issue = client.get_issue(&key).await?;
+                print_json(&issue);
+            }
         }
         Commands::Update {
             key,
@@ -386,6 +439,7 @@ async fn main() -> Result<()> {
             description,
             project,
             issue_type,
+            parent,
             labels,
             priority,
             assignee,
@@ -400,8 +454,18 @@ async fn main() -> Result<()> {
             if let Some(project) = project {
                 fields.insert("project".to_string(), json!({ "key": project }));
             }
+            let issue_type = issue_type.or_else(|| {
+                if parent.is_some() {
+                    Some("Sub-task".to_string())
+                } else {
+                    None
+                }
+            });
             if let Some(issue_type) = issue_type {
                 fields.insert("issuetype".to_string(), json!({ "name": issue_type }));
+            }
+            if let Some(parent) = parent {
+                fields.insert("parent".to_string(), json!({ "key": parent }));
             }
             if let Some(labels) = labels {
                 fields.insert("labels".to_string(), json!(labels));
@@ -414,7 +478,7 @@ async fn main() -> Result<()> {
             }
             if fields.is_empty() {
                 return Err(anyhow!(
-                    "Provide at least one field to update (--summary, --description, --project, --issue-type, --labels, --priority, --assignee)"
+                    "Provide at least one field to update (--summary, --description, --project, --issue-type, --parent, --labels, --priority, --assignee)"
                 ));
             }
             let updated = client.update_issue(&key, fields).await?;
@@ -499,6 +563,7 @@ mod tests {
                 "Title",
                 Some("Desc".to_string()),
                 "Task",
+                None,
                 Some(vec!["bug".to_string(), "ui".to_string()]),
                 Some("High".to_string()),
                 Some("abc".to_string()),
@@ -508,6 +573,69 @@ mod tests {
 
         mock.assert();
         assert_eq!(response["id"], "10000");
+    }
+
+    #[tokio::test]
+    async fn create_issue_with_parent_sets_parent_field() {
+        let server = MockServer::start();
+        let expected_body = json!({
+            "fields": {
+                "project": { "key": "ACME" },
+                "summary": "Child issue",
+                "issuetype": { "name": "Sub-task" },
+                "description": null,
+                "parent": { "key": "ACME-1" }
+            }
+        });
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/rest/api/3/issue")
+                .json_body(expected_body.clone());
+            then.status(201).json_body(json!({ "id": "10001" }));
+        });
+
+        let client = JiraClient::new(&test_settings(&server.base_url())).unwrap();
+        let response = client
+            .create_issue(
+                "ACME",
+                "Child issue",
+                None,
+                "Sub-task",
+                Some("ACME-1".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        mock.assert();
+        assert_eq!(response["id"], "10001");
+    }
+
+    #[tokio::test]
+    async fn get_issue_subtasks_returns_list() {
+        let server = MockServer::start();
+        let response_body = json!({
+            "fields": {
+                "subtasks": [
+                    { "id": "20001", "key": "ACME-2" },
+                    { "id": "20002", "key": "ACME-3" }
+                ]
+            }
+        });
+        let mock = server.mock(|when, then| {
+            when.method(GET)
+                .path("/rest/api/3/issue/ACME-1")
+                .query_param("fields", "subtasks");
+            then.status(200).json_body(response_body.clone());
+        });
+
+        let client = JiraClient::new(&test_settings(&server.base_url())).unwrap();
+        let response = client.get_issue_subtasks("ACME-1").await.unwrap();
+
+        mock.assert();
+        assert_eq!(response, response_body["fields"]["subtasks"]);
     }
 
     #[tokio::test]
