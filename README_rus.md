@@ -2,7 +2,7 @@
 
 Консольная утилита на Rust для работы с Jira Cloud: создание, просмотр, редактирование, список задач и переходы статусов. Все ответы от Jira выводятся в JSON (pretty-print), чтобы их легко было парсить/читать.
 
-Текущая версия: v0.0.1.
+Текущая версия: v0.0.3.
 
 ## Настройка
 
@@ -24,10 +24,10 @@ jico <command> [args]
 ```
 
 Команды:
-- `create <summary> [--description <text>] [--project <KEY>] [--issue-type <name>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — создать задачу.
+- `create <summary> [--description <text>] [--project <KEY>] [--issue-type <name>] [--parent <KEY>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — создать задачу (для сабтаска используйте `--parent`).
 - `list [--jql <expr>] [--limit <n>] [--project <KEY>]` — список задач (по умолчанию `JIRA_DEFAULT_JQL` или `project = KEY`).
-- `view <ISSUE-KEY>` — показать задачу.
-- `update <ISSUE-KEY> [--summary <text>] [--description <text>] [--project <KEY>] [--issue-type <name>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — изменить поля задачи (нужно указать хотя бы одно поле).
+- `view <ISSUE-KEY> [--subtasks]` — показать задачу или список сабтасков.
+- `update <ISSUE-KEY> [--summary <text>] [--description <text>] [--project <KEY>] [--issue-type <name>] [--parent <KEY>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — изменить поля задачи (нужно указать хотя бы одно поле).
 - `transition <ISSUE-KEY> --to <status>` — выполнить переход по статусу/transition name (по имени без учета регистра).
 
 Если не указан проект, используется `JIRA_PROJECT_KEY` (если задан).
@@ -37,13 +37,15 @@ jico <command> [args]
 ```
 jico create "Fix login"
 jico create "Fix login" --labels bug,ui --priority High --assignee 12345:abcd
+jico create "Child issue" --parent PROJ-1
 jico list --limit 10
 jico view PROJ-123
+jico view PROJ-123 --subtasks
 jico update PROJ-123 --summary "Уточнить задачу" --description "Подправили текст"
 jico transition PROJ-123 --to "In Progress"
 ```
 
 ## Сборка RPM
 
-- `make rpm VERSION=0.0.1` (требуются `rpmbuild`, `git` и Rust toolchain).
+- `make rpm VERSION=0.0.3` (требуются `rpmbuild`, `git` и Rust toolchain).
 - Спека: `packaging/jico.spec`; пакет устанавливает бинарник, man-страницу (`jico(1)`) и `env.example` в `/usr/share/doc/jico/`.

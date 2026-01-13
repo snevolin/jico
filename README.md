@@ -2,7 +2,7 @@
 
 Rust CLI for Jira Cloud: create issues, list/search, view, update fields, and transition statuses. All Jira responses are printed as pretty JSON for easy reading/parsing.
 
-Current version: v0.0.1.
+Current version: v0.0.3.
 
 ## Setup
 
@@ -24,10 +24,10 @@ jico <command> [args]
 ```
 
 Commands:
-- `create <summary> [--description <text>] [--project <KEY>] [--issue-type <name>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — create an issue.
+- `create <summary> [--description <text>] [--project <KEY>] [--issue-type <name>] [--parent <KEY>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — create an issue (use `--parent` for sub-tasks).
 - `list [--jql <expr>] [--limit <n>] [--project <KEY>]` — list issues (defaults to `JIRA_DEFAULT_JQL` or `project = KEY`).
-- `view <ISSUE-KEY>` — show an issue.
-- `update <ISSUE-KEY> [--summary <text>] [--description <text>] [--project <KEY>] [--issue-type <name>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — update an issue (provide at least one field).
+- `view <ISSUE-KEY> [--subtasks]` — show an issue or list its subtasks.
+- `update <ISSUE-KEY> [--summary <text>] [--description <text>] [--project <KEY>] [--issue-type <name>] [--parent <KEY>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — update an issue (provide at least one field).
 - `transition <ISSUE-KEY> --to <status>` — perform a transition by name (case-insensitive).
 
 If no project is provided, `JIRA_PROJECT_KEY` is used (when present).
@@ -37,13 +37,15 @@ If no project is provided, `JIRA_PROJECT_KEY` is used (when present).
 ```
 jico create "Fix login"
 jico create "Fix login" --labels bug,ui --priority High --assignee 12345:abcd
+jico create "Child issue" --parent PROJ-1
 jico list --limit 10
 jico view PROJ-123
+jico view PROJ-123 --subtasks
 jico update PROJ-123 --summary "Tighten auth" --description "Rotated secrets"
 jico transition PROJ-123 --to "In Progress"
 ```
 
 ## Packaging
 
-- Build RPM (requires `rpmbuild`, `git`, and the Rust toolchain): `make rpm VERSION=0.0.1`
+- Build RPM (requires `rpmbuild`, `git`, and the Rust toolchain): `make rpm VERSION=0.0.3`
 - Spec file lives at `packaging/jico.spec`; package installs the binary, man page (`jico(1)`), and `env.example` under `/usr/share/doc/jico/`.
