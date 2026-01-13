@@ -4,7 +4,7 @@ repository = "https://github.com/snevolin/jico"
 homepage = "https://github.com/snevolin/jico"
 description = "CLI helper for Jira Cloud"
 authors = ["Stanislav Nevolin <stanislav@nevolin.info>"]
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 
 [package.metadata.wix]
