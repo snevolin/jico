@@ -1,24 +1,27 @@
 name: Build RPM
 
 on:
-  push:
-    branches: [ "main", "master" ]
-    tags: [ "v*" ]
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:
   build_rpm:
     runs-on: ubuntu-latest
     container: fedora:latest
+    permissions:
+      contents: write # Needed to upload to release
 
     steps:
       # Install git and build dependencies. Fedora's minimal image may not have them.
       - name: Install dependencies
         run: |
-          dnf install -y git rpm-build rust cargo tar gzip openssl-devel
+          dnf install -y git rpm-build rust cargo tar gzip openssl-devel gh
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       - name: Prepare Source
         run: |
@@ -50,3 +53,15 @@ jobs:
         with:
           name: jico-rpm
           path: ~/rpmbuild/RPMS/**/*.rpm
+
+      - name: Upload RPM to Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find the RPM file
+          RPM_FILE=$(find ~/rpmbuild/RPMS -name "*.rpm" | head -n 1)
+          echo "Found RPM: $RPM_FILE"
+          
+          # Upload to the release that triggered this workflow
+          gh release upload ${{ github.event.release.tag_name }} "$RPM_FILE" --clobber
