@@ -1,0 +1,54 @@
+name: Build RPM
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+jobs:
+  build_rpm:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+
+    steps:
+      # Устанавливаем git перед checkout, так как в минимальном образе fedora его может не быть,
+      # а actions/checkout он может понадобиться.
+      # Также устанавливаем инструменты для сборки.
+      - name: Install dependencies
+        run: |
+          dnf install -y git rpm-build rust cargo tar gzip
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare Source
+        run: |
+          # Извлекаем версию из Cargo.toml
+          VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f 2)
+          echo "Detected version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
+          # Подготавливаем директорию для архивации, чтобы она соответствовала %setup -q
+          # Используем временную директорию, чтобы избежать копирования самой себя
+          mkdir -p /tmp/jico-$VERSION
+          cp -r . /tmp/jico-$VERSION/
+          rm -rf /tmp/jico-$VERSION/.git
+          
+          # Создаем tarball в рабочей директории
+          tar -czf jico-$VERSION.tar.gz -C /tmp jico-$VERSION
+          
+          # Создаем структуру директорий для rpmbuild
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          mv jico-$VERSION.tar.gz ~/rpmbuild/SOURCES/
+
+      - name: Build RPM
+        run: |
+          # Запускаем сборку, передавая версию
+          rpmbuild -ba packaging/jico.spec --define "version ${{ env.VERSION }}"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jico-rpm
+          path: ~/rpmbuild/RPMS/**/*.rpm
