@@ -1,5 +1,5 @@
 NAME ?= jico
-VERSION ?= 0.0.2
+VERSION ?= 0.0.3
 RPMBUILD := $(CURDIR)/target/rpm
 
 .PHONY: rpm test

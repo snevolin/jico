@@ -261,10 +261,15 @@ impl JiraClient {
             .await
             .context("Failed to send update issue request")?;
         let status = resp.status();
-        let value: Value = resp
-            .json()
+        let body = resp
+            .bytes()
             .await
-            .context("Failed to parse update issue response")?;
+            .context("Failed to read update issue response")?;
+        let value: Value = if body.is_empty() {
+            json!({})
+        } else {
+            serde_json::from_slice(&body).context("Failed to parse update issue response")?
+        };
         if !status.is_success() {
             return Err(anyhow!("Jira returned error status {}: {}", status, value));
         }
@@ -534,5 +539,30 @@ mod tests {
 
         mock.assert();
         assert_eq!(response["ok"], true);
+    }
+
+    #[tokio::test]
+    async fn update_issue_allows_empty_response() {
+        let server = MockServer::start();
+        let expected_body = json!({
+            "fields": {
+                "summary": "Another summary"
+            }
+        });
+        let mock = server.mock(|when, then| {
+            when.method(PUT)
+                .path("/rest/api/3/issue/ACME-2")
+                .json_body(expected_body.clone());
+            then.status(204);
+        });
+
+        let client = JiraClient::new(&test_settings(&server.base_url())).unwrap();
+        let mut fields = Map::new();
+        fields.insert("summary".to_string(), json!("Another summary"));
+
+        let response = client.update_issue("ACME-2", fields).await.unwrap();
+
+        mock.assert();
+        assert_eq!(response, json!({}));
     }
 }
