@@ -1,9 +1,17 @@
 name: Build RPM
 
 on:
+  push:
+    tags:
+      - '**[0-9]+.[0-9]+.[0-9]+*'
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload RPM to (e.g. v0.0.4). Optional."
+        required: false
+        type: string
 
 jobs:
   build_rpm:
@@ -13,6 +21,37 @@ jobs:
       contents: write # Needed to upload to release
 
     steps:
+      - name: Resolve ref/tag context
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CHECKOUT_REF="${GITHUB_REF}"
+          RELEASE_TAG=""
+          UPLOAD="false"
+
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            RELEASE_TAG="${{ github.event.release.tag_name }}"
+            CHECKOUT_REF="${RELEASE_TAG}"
+            UPLOAD="true"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            RELEASE_TAG="${{ inputs.tag }}"
+            CHECKOUT_REF="${RELEASE_TAG}"
+            UPLOAD="true"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+            UPLOAD="true"
+          fi
+
+          echo "checkout_ref=${CHECKOUT_REF}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "upload_to_release=${UPLOAD}" >> "$GITHUB_OUTPUT"
+
+          echo "checkout_ref=${CHECKOUT_REF}"
+          echo "release_tag=${RELEASE_TAG}"
+          echo "upload_to_release=${UPLOAD}"
+
       # Install git and build dependencies. Fedora's minimal image may not have them.
       - name: Install dependencies
         run: |
@@ -21,7 +60,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name || github.ref }}
+          ref: ${{ steps.meta.outputs.checkout_ref }}
 
       - name: Prepare Source
         run: |
@@ -55,13 +94,28 @@ jobs:
           path: ~/rpmbuild/RPMS/**/*.rpm
 
       - name: Upload RPM to Release
-        if: github.event_name == 'release'
+        if: steps.meta.outputs.upload_to_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          TAG="${{ steps.meta.outputs.release_tag }}"
+
+          # On tag-push runs, release creation may still be in progress.
+          # Wait a bit so upload doesn't fail with "release not found".
+          if [[ "${{ github.event_name }}" != "release" ]]; then
+            for i in $(seq 1 30); do
+              if gh release view "$TAG" >/dev/null 2>&1; then
+                break
+              fi
+              echo "Release $TAG not found yet (attempt $i/30), waiting..."
+              sleep 10
+            done
+            gh release view "$TAG" >/dev/null 2>&1
+          fi
+
           # Find the RPM file
           RPM_FILE=$(find ~/rpmbuild/RPMS -name "*.rpm" | head -n 1)
           echo "Found RPM: $RPM_FILE"
           
           # Upload to the release that triggered this workflow
-          gh release upload ${{ github.event.release.tag_name }} "$RPM_FILE" --clobber
+          gh release upload "$TAG" "$RPM_FILE" --clobber
