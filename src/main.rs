@@ -130,8 +130,11 @@ impl LinkRelation {
 
     fn outward_inward_keys<'a>(self, key: &'a str, to: &'a str) -> (&'a str, &'a str) {
         match self {
-            LinkRelation::Blocks => (key, to),
-            LinkRelation::BlockedBy => (to, key),
+            // Jira renders links as:
+            // - current issue == inwardIssue  -> type.outward  ("blocks")
+            // - current issue == outwardIssue -> type.inward   ("is blocked by")
+            LinkRelation::Blocks => (to, key),
+            LinkRelation::BlockedBy => (key, to),
         }
     }
 }
@@ -762,12 +765,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn link_issues_blocks_sets_outward_as_source_issue() {
+    async fn link_issues_blocks_sets_outward_as_target_issue() {
         let server = MockServer::start();
         let expected_body = json!({
             "type": { "name": "Blocks" },
-            "outwardIssue": { "key": "MG-3" },
-            "inwardIssue": { "key": "MG-26" }
+            "outwardIssue": { "key": "MG-26" },
+            "inwardIssue": { "key": "MG-3" }
         });
         let mock = server.mock(|when, then| {
             when.method(POST)
@@ -791,8 +794,8 @@ mod tests {
         let server = MockServer::start();
         let expected_body = json!({
             "type": { "name": "Blocks" },
-            "outwardIssue": { "key": "MG-3" },
-            "inwardIssue": { "key": "MG-26" }
+            "outwardIssue": { "key": "MG-26" },
+            "inwardIssue": { "key": "MG-3" }
         });
         let mock = server.mock(|when, then| {
             when.method(POST)

@@ -233,8 +233,8 @@ fn cli_link_blocked_by_creates_blocks_issue_link() -> Result<()> {
     let server = MockServer::start();
     let expected_body = json!({
         "type": { "name": "Blocks" },
-        "outwardIssue": { "key": "MG-3" },
-        "inwardIssue": { "key": "MG-26" }
+        "outwardIssue": { "key": "MG-26" },
+        "inwardIssue": { "key": "MG-3" }
     });
     let mock = server.mock(|when, then| {
         when.method(POST)
