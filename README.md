@@ -2,7 +2,7 @@
 
 Rust CLI for Jira Cloud: create issues, list/search, view, update fields, and transition statuses. All Jira responses are printed as pretty JSON for easy reading/parsing.
 
-Current version: v0.0.3.
+Current version: v0.0.4.
 
 ## Setup
 
@@ -50,5 +50,5 @@ jico link PROJ-26 --to PROJ-3 --relation relates-to
 
 ## Packaging
 
-- Build RPM (requires `rpmbuild`, `git`, and the Rust toolchain): `make rpm VERSION=0.0.3`
+- Build RPM (requires `rpmbuild`, `git`, and the Rust toolchain): `make rpm VERSION=0.0.4`
 - Spec file lives at `packaging/jico.spec`; package installs the binary, man page (`jico(1)`), and `env.example` under `/usr/share/doc/jico/`.

@@ -2,7 +2,7 @@
 
 Консольная утилита на Rust для работы с Jira Cloud: создание, просмотр, редактирование, список задач и переходы статусов. Все ответы от Jira выводятся в JSON (pretty-print), чтобы их легко было парсить/читать.
 
-Текущая версия: v0.0.3.
+Текущая версия: v0.0.4.
 
 ## Настройка
 
@@ -50,5 +50,5 @@ jico link PROJ-26 --to PROJ-3 --relation relates-to
 
 ## Сборка RPM
 
-- `make rpm VERSION=0.0.3` (требуются `rpmbuild`, `git` и Rust toolchain).
+- `make rpm VERSION=0.0.4` (требуются `rpmbuild`, `git` и Rust toolchain).
 - Спека: `packaging/jico.spec`; пакет устанавливает бинарник, man-страницу (`jico(1)`) и `env.example` в `/usr/share/doc/jico/`.
