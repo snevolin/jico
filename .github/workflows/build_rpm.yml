@@ -100,22 +100,23 @@ jobs:
         run: |
           TAG="${{ steps.meta.outputs.release_tag }}"
 
-          # On tag-push runs, release creation may still be in progress.
-          # Wait a bit so upload doesn't fail with "release not found".
-          if [[ "${{ github.event_name }}" != "release" ]]; then
-            for i in $(seq 1 30); do
-              if gh release view "$TAG" >/dev/null 2>&1; then
-                break
-              fi
-              echo "Release $TAG not found yet (attempt $i/30), waiting..."
-              sleep 10
-            done
-            gh release view "$TAG" >/dev/null 2>&1
-          fi
-
           # Find the RPM file
           RPM_FILE=$(find ~/rpmbuild/RPMS -name "*.rpm" | head -n 1)
           echo "Found RPM: $RPM_FILE"
-          
-          # Upload to the release that triggered this workflow
-          gh release upload "$TAG" "$RPM_FILE" --clobber
+
+          # Release creation can race with tag-push builds.
+          # Retry upload until the release appears.
+          UPLOADED="false"
+          for i in $(seq 1 30); do
+            if gh release upload "$TAG" "$RPM_FILE" -R "$GITHUB_REPOSITORY" --clobber; then
+              UPLOADED="true"
+              break
+            fi
+            echo "Release $TAG not ready yet (attempt $i/30), waiting..."
+            sleep 10
+          done
+
+          if [[ "$UPLOADED" != "true" ]]; then
+            echo "Failed to upload RPM to release $TAG after retries."
+            exit 1
+          fi
