@@ -21,3 +21,14 @@ When bumping version, update these files in the same PR:
 
 ## Why this is required
 RPM upgrades/installations rely on package version/release ordering. Rebuilding an RPM with the same version often does not upgrade cleanly. Bumping version per PR avoids reinstall/upgrade conflicts.
+
+## Release Tag Policy
+After the version bump is merged/released, create a git tag for that exact version.
+
+- Tag format: `vX.Y.Z` (must match `Cargo.toml` version).
+- Use an annotated tag:
+  - `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
+- Push the tag:
+  - `git push origin vX.Y.Z`
+
+Do not create a tag with a version that does not exist in the repository files.
