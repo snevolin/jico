@@ -29,6 +29,7 @@ Commands:
 - `view <ISSUE-KEY> [--subtasks]` — show an issue or list its subtasks.
 - `update <ISSUE-KEY> [--summary <text>] [--description <text>] [--project <KEY>] [--issue-type <name>] [--parent <KEY>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — update an issue (provide at least one field).
 - `transition <ISSUE-KEY> --to <status>` — perform a transition by name (case-insensitive).
+- `link <ISSUE-KEY> --to <ISSUE-KEY> [--relation <blocks|blocked-by>]` — create an issue link (default relation: `blocks`).
 
 If no project is provided, `JIRA_PROJECT_KEY` is used (when present).
 
@@ -43,6 +44,7 @@ jico view PROJ-123
 jico view PROJ-123 --subtasks
 jico update PROJ-123 --summary "Tighten auth" --description "Rotated secrets"
 jico transition PROJ-123 --to "In Progress"
+jico link PROJ-26 --to PROJ-3 --relation blocked-by
 ```
 
 ## Packaging

@@ -227,3 +227,39 @@ fn cli_update_with_parent_defaults_to_subtask() -> Result<()> {
     assert_eq!(value["ok"], true);
     Ok(())
 }
+
+#[test]
+fn cli_link_blocked_by_creates_blocks_issue_link() -> Result<()> {
+    let server = MockServer::start();
+    let expected_body = json!({
+        "type": { "name": "Blocks" },
+        "outwardIssue": { "key": "MG-3" },
+        "inwardIssue": { "key": "MG-26" }
+    });
+    let mock = server.mock(|when, then| {
+        when.method(POST)
+            .path("/rest/api/3/issueLink")
+            .json_body(expected_body.clone());
+        then.status(201);
+    });
+
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("jico"));
+    for (key, val) in base_env(&server) {
+        cmd.env(key, val);
+    }
+    let assert = cmd
+        .arg("link")
+        .arg("MG-26")
+        .arg("--to")
+        .arg("MG-3")
+        .arg("--relation")
+        .arg("blocked-by")
+        .assert()
+        .success();
+
+    mock.assert();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone())?;
+    let value: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(value, json!({}));
+    Ok(())
+}

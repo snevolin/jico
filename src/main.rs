@@ -3,7 +3,7 @@ use std::env;
 use anyhow::{Context, Result, anyhow};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use dotenvy::dotenv;
 use reqwest::header;
 use serde_json::{Map, Value, json};
@@ -100,6 +100,40 @@ enum Commands {
         #[arg(long)]
         to: String,
     },
+    /// Link two issues
+    Link {
+        /// Issue key, e.g., PROJ-123
+        key: String,
+        /// Target issue key, e.g., PROJ-456
+        #[arg(long)]
+        to: String,
+        /// Link relation from issue key to target issue
+        #[arg(long, value_enum, default_value_t = LinkRelation::Blocks)]
+        relation: LinkRelation,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum LinkRelation {
+    /// key blocks --to
+    Blocks,
+    /// key is blocked by --to
+    BlockedBy,
+}
+
+impl LinkRelation {
+    fn link_type_name(self) -> &'static str {
+        match self {
+            LinkRelation::Blocks | LinkRelation::BlockedBy => "Blocks",
+        }
+    }
+
+    fn outward_inward_keys<'a>(self, key: &'a str, to: &'a str) -> (&'a str, &'a str) {
+        match self {
+            LinkRelation::Blocks => (key, to),
+            LinkRelation::BlockedBy => (to, key),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -264,10 +298,7 @@ impl JiraClient {
     }
 
     async fn get_issue_subtasks(&self, key: &str) -> Result<Value> {
-        let url = format!(
-            "{}/rest/api/3/issue/{}?fields=subtasks",
-            self.base_url, key
-        );
+        let url = format!("{}/rest/api/3/issue/{}?fields=subtasks", self.base_url, key);
         let resp = self
             .http
             .get(url)
@@ -362,6 +393,38 @@ impl JiraClient {
             .json()
             .await
             .context("Failed to parse transition response")?;
+        if !status.is_success() {
+            return Err(anyhow!("Jira returned error status {}: {}", status, value));
+        }
+        Ok(value)
+    }
+
+    async fn link_issues(&self, key: &str, to: &str, relation: LinkRelation) -> Result<Value> {
+        let url = format!("{}/rest/api/3/issueLink", self.base_url);
+        let (outward_key, inward_key) = relation.outward_inward_keys(key, to);
+        let body = json!({
+            "type": { "name": relation.link_type_name() },
+            "outwardIssue": { "key": outward_key },
+            "inwardIssue": { "key": inward_key }
+        });
+
+        let resp = self
+            .http
+            .post(url)
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to send issue link request")?;
+        let status = resp.status();
+        let body = resp
+            .bytes()
+            .await
+            .context("Failed to read issue link response")?;
+        let value: Value = if body.is_empty() {
+            json!({})
+        } else {
+            serde_json::from_slice(&body).context("Failed to parse issue link response")?
+        };
         if !status.is_success() {
             return Err(anyhow!("Jira returned error status {}: {}", status, value));
         }
@@ -486,6 +549,10 @@ async fn main() -> Result<()> {
         }
         Commands::Transition { key, to } => {
             let result = client.transition_issue(&key, &to).await?;
+            print_json(&result);
+        }
+        Commands::Link { key, to, relation } => {
+            let result = client.link_issues(&key, &to, relation).await?;
             print_json(&result);
         }
     }
@@ -692,5 +759,55 @@ mod tests {
 
         mock.assert();
         assert_eq!(response, json!({}));
+    }
+
+    #[tokio::test]
+    async fn link_issues_blocks_sets_outward_as_source_issue() {
+        let server = MockServer::start();
+        let expected_body = json!({
+            "type": { "name": "Blocks" },
+            "outwardIssue": { "key": "MG-3" },
+            "inwardIssue": { "key": "MG-26" }
+        });
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/rest/api/3/issueLink")
+                .json_body(expected_body.clone());
+            then.status(201);
+        });
+
+        let client = JiraClient::new(&test_settings(&server.base_url())).unwrap();
+        let response = client
+            .link_issues("MG-3", "MG-26", LinkRelation::Blocks)
+            .await
+            .unwrap();
+
+        mock.assert();
+        assert_eq!(response, json!({}));
+    }
+
+    #[tokio::test]
+    async fn link_issues_blocked_by_sets_outward_as_blocker_issue() {
+        let server = MockServer::start();
+        let expected_body = json!({
+            "type": { "name": "Blocks" },
+            "outwardIssue": { "key": "MG-3" },
+            "inwardIssue": { "key": "MG-26" }
+        });
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/rest/api/3/issueLink")
+                .json_body(expected_body.clone());
+            then.status(201).json_body(json!({ "ok": true }));
+        });
+
+        let client = JiraClient::new(&test_settings(&server.base_url())).unwrap();
+        let response = client
+            .link_issues("MG-26", "MG-3", LinkRelation::BlockedBy)
+            .await
+            .unwrap();
+
+        mock.assert();
+        assert_eq!(response["ok"], true);
     }
 }
