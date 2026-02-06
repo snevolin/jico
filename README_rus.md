@@ -29,6 +29,7 @@ jico <command> [args]
 - `view <ISSUE-KEY> [--subtasks]` — показать задачу или список сабтасков.
 - `update <ISSUE-KEY> [--summary <text>] [--description <text>] [--project <KEY>] [--issue-type <name>] [--parent <KEY>] [--labels <a,b>] [--priority <name>] [--assignee <accountId>]` — изменить поля задачи (нужно указать хотя бы одно поле).
 - `transition <ISSUE-KEY> --to <status>` — выполнить переход по статусу/transition name (по имени без учета регистра).
+- `link <ISSUE-KEY> --to <ISSUE-KEY> [--relation <blocks|blocked-by|clones|is-cloned-by|duplicates|is-duplicated-by|relates-to>]` — создать связь между задачами (по умолчанию: `blocks`).
 
 Если не указан проект, используется `JIRA_PROJECT_KEY` (если задан).
 
@@ -43,6 +44,8 @@ jico view PROJ-123
 jico view PROJ-123 --subtasks
 jico update PROJ-123 --summary "Уточнить задачу" --description "Подправили текст"
 jico transition PROJ-123 --to "In Progress"
+jico link PROJ-26 --to PROJ-3 --relation blocked-by
+jico link PROJ-26 --to PROJ-3 --relation relates-to
 ```
 
 ## Сборка RPM
