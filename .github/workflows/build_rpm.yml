@@ -55,7 +55,7 @@ jobs:
       # Install git and build dependencies. Fedora's minimal image may not have them.
       - name: Install dependencies
         run: |
-          dnf install -y git rpm-build rust cargo tar gzip openssl-devel gh
+          dnf install -y git rpm-build rust cargo tar gzip openssl-devel gh jq
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -94,6 +94,7 @@ jobs:
           path: ~/rpmbuild/RPMS/**/*.rpm
 
       - name: Upload RPM to Release
+        id: upload_rpm
         if: steps.meta.outputs.upload_to_release == 'true'
         shell: bash
         env:
@@ -108,7 +109,9 @@ jobs:
             find ~/rpmbuild/RPMS -name "*.rpm" -print
             exit 1
           fi
+          RPM_NAME="$(basename "$RPM_FILE")"
           echo "Found main RPM: $RPM_FILE"
+          echo "rpm_asset_name=$RPM_NAME" >> "$GITHUB_OUTPUT"
 
           # Release creation can race with tag-push builds.
           # Retry upload until the release appears.
@@ -126,3 +129,52 @@ jobs:
             echo "Failed to upload RPM to release $TAG after retries."
             exit 1
           fi
+
+      - name: Update release notes with RPM link
+        if: steps.meta.outputs.upload_to_release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.meta.outputs.release_tag }}"
+          RPM_NAME="${{ steps.upload_rpm.outputs.rpm_asset_name }}"
+
+          RELEASE_JSON="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")"
+          RELEASE_ID="$(jq -r '.id' <<<"$RELEASE_JSON")"
+          RELEASE_BODY="$(jq -r '.body // \"\"' <<<"$RELEASE_JSON")"
+          RPM_URL="$(jq -r --arg name "$RPM_NAME" '.assets[] | select(.name == $name) | .browser_download_url' <<<"$RELEASE_JSON" | head -n 1)"
+
+          if [[ -z "$RPM_URL" || "$RPM_URL" == "null" ]]; then
+            echo "Could not resolve browser_download_url for asset $RPM_NAME in release $TAG"
+            exit 1
+          fi
+
+          START_MARKER="<!-- jico-rpm-start -->"
+          END_MARKER="<!-- jico-rpm-end -->"
+          RPM_SECTION="$(cat <<EOF
+$START_MARKER
+### RPM package
+- [$RPM_NAME]($RPM_URL)
+$END_MARKER
+EOF
+)"
+
+          CLEAN_BODY="$(printf '%s\n' "$RELEASE_BODY" | awk -v start="$START_MARKER" -v end="$END_MARKER" '
+            BEGIN { skip = 0 }
+            index($0, start) { skip = 1; next }
+            index($0, end) { skip = 0; next }
+            !skip { print }
+          ')"
+
+          while [[ "$CLEAN_BODY" == *$'\n' ]]; do
+            CLEAN_BODY="${CLEAN_BODY%$'\n'}"
+          done
+
+          if [[ -n "$CLEAN_BODY" ]]; then
+            UPDATED_BODY="$CLEAN_BODY"$'\n\n'"$RPM_SECTION"
+          else
+            UPDATED_BODY="$RPM_SECTION"
+          fi
+
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f body="$UPDATED_BODY" >/dev/null
+          echo "Release notes for $TAG updated with RPM link."
