@@ -95,14 +95,20 @@ jobs:
 
       - name: Upload RPM to Release
         if: steps.meta.outputs.upload_to_release == 'true'
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.meta.outputs.release_tag }}"
 
-          # Find the RPM file
-          RPM_FILE=$(find ~/rpmbuild/RPMS -name "*.rpm" | head -n 1)
-          echo "Found RPM: $RPM_FILE"
+          # Upload the main package, not debug subpackages.
+          RPM_FILE=$(find ~/rpmbuild/RPMS -name "jico-*.rpm" | grep -Ev '(debuginfo|debugsource)' | head -n 1 || true)
+          if [[ -z "$RPM_FILE" ]]; then
+            echo "Main jico RPM not found under ~/rpmbuild/RPMS."
+            find ~/rpmbuild/RPMS -name "*.rpm" -print
+            exit 1
+          fi
+          echo "Found main RPM: $RPM_FILE"
 
           # Release creation can race with tag-push builds.
           # Retry upload until the release appears.
