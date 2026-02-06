@@ -119,12 +119,25 @@ enum LinkRelation {
     Blocks,
     /// key is blocked by --to
     BlockedBy,
+    /// key clones --to
+    Clones,
+    /// key is cloned by --to
+    IsClonedBy,
+    /// key duplicates --to
+    Duplicates,
+    /// key is duplicated by --to
+    IsDuplicatedBy,
+    /// key relates to --to
+    RelatesTo,
 }
 
 impl LinkRelation {
     fn link_type_name(self) -> &'static str {
         match self {
             LinkRelation::Blocks | LinkRelation::BlockedBy => "Blocks",
+            LinkRelation::Clones | LinkRelation::IsClonedBy => "Cloners",
+            LinkRelation::Duplicates | LinkRelation::IsDuplicatedBy => "Duplicate",
+            LinkRelation::RelatesTo => "Relates",
         }
     }
 
@@ -133,8 +146,13 @@ impl LinkRelation {
             // Jira renders links as:
             // - current issue == inwardIssue  -> type.outward  ("blocks")
             // - current issue == outwardIssue -> type.inward   ("is blocked by")
-            LinkRelation::Blocks => (to, key),
-            LinkRelation::BlockedBy => (key, to),
+            LinkRelation::Blocks
+            | LinkRelation::Clones
+            | LinkRelation::Duplicates
+            | LinkRelation::RelatesTo => (to, key),
+            LinkRelation::BlockedBy | LinkRelation::IsClonedBy | LinkRelation::IsDuplicatedBy => {
+                (key, to)
+            }
         }
     }
 }
@@ -812,5 +830,27 @@ mod tests {
 
         mock.assert();
         assert_eq!(response["ok"], true);
+    }
+
+    #[test]
+    fn link_relation_maps_type_name_and_direction() {
+        let key = "MG-26";
+        let to = "MG-3";
+        let cases = [
+            (LinkRelation::Blocks, "Blocks", ("MG-3", "MG-26")),
+            (LinkRelation::BlockedBy, "Blocks", ("MG-26", "MG-3")),
+            (LinkRelation::Clones, "Cloners", ("MG-3", "MG-26")),
+            (LinkRelation::IsClonedBy, "Cloners", ("MG-26", "MG-3")),
+            (LinkRelation::Duplicates, "Duplicate", ("MG-3", "MG-26")),
+            (LinkRelation::IsDuplicatedBy, "Duplicate", ("MG-26", "MG-3")),
+            (LinkRelation::RelatesTo, "Relates", ("MG-3", "MG-26")),
+        ];
+
+        for (relation, expected_type, (expected_outward, expected_inward)) in cases {
+            assert_eq!(relation.link_type_name(), expected_type);
+            let (outward, inward) = relation.outward_inward_keys(key, to);
+            assert_eq!(outward, expected_outward);
+            assert_eq!(inward, expected_inward);
+        }
     }
 }

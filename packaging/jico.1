@@ -45,7 +45,7 @@ Update fields: \fBjico update ISSUE-KEY [--summary TEXT] [--description TEXT] [-
 Transition an issue: \fBjico transition ISSUE-KEY --to STATUS\fR
 .TP
 .B link
-Link issues: \fBjico link ISSUE-KEY --to ISSUE-KEY [--relation blocks|blocked-by]\fR
+Link issues: \fBjico link ISSUE-KEY --to ISSUE-KEY [--relation blocks|blocked-by|clones|is-cloned-by|duplicates|is-duplicated-by|relates-to]\fR
 .SH EXAMPLES
 .nf
 jico create "Fix login" --project ACME --labels bug,ui --priority High --assignee 12345:abcd
@@ -56,6 +56,7 @@ jico view ACME-123 --subtasks
 jico update ACME-123 --summary "Clarify scope" --labels backend --priority Medium
 jico transition ACME-123 --to "In Progress"
 jico link ACME-26 --to ACME-3 --relation blocked-by
+jico link ACME-26 --to ACME-3 --relation relates-to
 .fi
 .SH AUTHOR
 Stanislav Nevolin <stanislav@nevolin.info>
